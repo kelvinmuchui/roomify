@@ -1,6 +1,5 @@
 import { CheckCircle2, ImageIcon, UploadIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
-import { useOutletContext } from 'react-router';
 import { PROGRESS_INTERVAL_MS, PROGRESS_STEP, REDIRECT_DELAY_MS } from '../lib/constants';
 
 interface UploadProps {
@@ -17,10 +16,6 @@ function Upload({ onComplete }: UploadProps) {
     const readerRef = useRef<FileReader | null>(null);
     const progressRef = useRef(0);
 
-    const { isSignedIn } = useOutletContext<AuthContext>();
-    const isSignedInRef = useRef(isSignedIn);
-    isSignedInRef.current = isSignedIn;
-
     const clearTimers = () => {
         if (intervalRef.current !== null) {
             window.clearInterval(intervalRef.current);
@@ -32,20 +27,6 @@ function Upload({ onComplete }: UploadProps) {
         }
     };
 
-    useEffect(() => {
-        if (isSignedIn) return;
-
-        setIsDragging(false);
-        setFile(null);
-        setProgress(0);
-        progressRef.current = 0;
-        clearTimers();
-        if (readerRef.current?.readyState === FileReader.LOADING) {
-            readerRef.current.abort();
-        }
-        readerRef.current = null;
-    }, [isSignedIn]);
-
     useEffect(() => () => {
         clearTimers();
         if (readerRef.current?.readyState === FileReader.LOADING) {
@@ -54,8 +35,6 @@ function Upload({ onComplete }: UploadProps) {
     }, []);
 
     const processFile = (selectedFile: File) => {
-        if (!isSignedInRef.current) return;
-
         clearTimers();
         setFile(selectedFile);
         setProgress(0);
@@ -66,7 +45,6 @@ function Upload({ onComplete }: UploadProps) {
         readerRef.current = reader;
         reader.onload = () => {
             readerRef.current = null;
-            if (!isSignedInRef.current) return;
             if (typeof reader.result !== 'string') {
                 setError('Unable to read this file. Please try another one.');
                 setFile(null);
@@ -75,11 +53,6 @@ function Upload({ onComplete }: UploadProps) {
 
             const base64 = reader.result;
             intervalRef.current = window.setInterval(() => {
-                if (!isSignedInRef.current) {
-                    clearTimers();
-                    return;
-                }
-
                 progressRef.current = Math.min(progressRef.current + PROGRESS_STEP, 100);
                 setProgress(progressRef.current);
 
@@ -87,14 +60,13 @@ function Upload({ onComplete }: UploadProps) {
                     clearTimers();
                     redirectTimeoutRef.current = window.setTimeout(() => {
                         redirectTimeoutRef.current = null;
-                        if (isSignedInRef.current) onComplete?.(base64);
+                        onComplete?.(base64);
                     }, REDIRECT_DELAY_MS);
                 }
             }, PROGRESS_INTERVAL_MS);
         };
         reader.onerror = () => {
             readerRef.current = null;
-            if (!isSignedInRef.current) return;
             setError('Unable to read this file. Please try again.');
             setFile(null);
         };
@@ -102,7 +74,6 @@ function Upload({ onComplete }: UploadProps) {
     };
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-        if (!isSignedInRef.current) return;
         const selectedFile = event.currentTarget.files?.[0];
         if (selectedFile) processFile(selectedFile);
         event.currentTarget.value = '';
@@ -110,18 +81,17 @@ function Upload({ onComplete }: UploadProps) {
 
     const handleDrag = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
-        if (isSignedInRef.current) setIsDragging(true);
+        setIsDragging(true);
     };
 
     const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
-        if (isSignedInRef.current) setIsDragging(false);
+        setIsDragging(false);
     };
 
     const handleDrop = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         setIsDragging(false);
-        if (!isSignedInRef.current) return;
         const droppedFile = event.dataTransfer.files[0];
         if (droppedFile) processFile(droppedFile);
     };
@@ -140,7 +110,6 @@ function Upload({ onComplete }: UploadProps) {
                    type="file"
                    className='drop-input'
                     accept=".jpg, .jpeg, .png"
-                   disabled={!isSignedIn }
                    onChange={handleChange}
                 /> 
                 <div className='drop-content'>
@@ -148,11 +117,7 @@ function Upload({ onComplete }: UploadProps) {
                         <UploadIcon size ={20}/>
                     </div>
                     <p>
-                        {isSignedIn ?(
-                            "Click to upload or drag and drop your floor plan here"
-                            ):(
-                            "Please sign in to upload your floor plan"
-                            )}
+                        Click to upload or drag and drop your floor plan here
                     </p>
                     <p className="help">Maximum file size 50MB</p>
                     {error && <p role="alert">{error}</p>}
